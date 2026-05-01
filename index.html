@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>BioAccess</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- face-api.js para detección facial en el navegador -->
-<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
 :root{--bg:#0A0A1A;--card:#0D0D2B;--acento:#00D4FF;--ok:#00C96B;--error:#FF3355;--texto:#FFFFFF;--sub:#AAAACC;--borde:#1A1A3A;--amber:#FFB300}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -153,7 +151,7 @@ body{background:var(--bg);color:var(--texto);font-family:Arial,sans-serif;min-he
       <svg class="oval-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
         <defs><mask id="oval-mask"><rect width="100" height="100" fill="white"/><ellipse cx="50" cy="48" rx="34" ry="40" fill="black"/></mask></defs>
         <rect width="100" height="100" fill="rgba(0,0,0,0.4)" mask="url(#oval-mask)"/>
-        <ellipse id="oval-line" cx="50" cy="48" rx="34" ry="40" fill="none" stroke="#00D4FF" stroke-width="0.8"/>
+        <ellipse cx="50" cy="48" rx="34" ry="40" fill="none" stroke="#00D4FF" stroke-width="0.8"/>
       </svg>
     </div>
     <p class="tc text-sub mb8" id="cam-inst">Centre su rostro en el óvalo y toque Capturar</p>
@@ -370,16 +368,16 @@ body{background:var(--bg);color:var(--texto);font-family:Arial,sans-serif;min-he
 
 <script>
 // ══════════ CONFIGURACIÓN ══════════
-const SUPABASE_URL      = 'https://kyhmhoiwraahqpibuwms.supabase.co';  // ← reemplazar
-const SUPABASE_ANON_KEY = 'sb_publishable_eY0JrrRDEJ_t0MMlJ6DNxQ_TMrb_djC';               // ← reemplazar
-const PIN_ADMIN         = '1234';                              // ← cambiar
-const UMBRAL_FACIAL     = 0.9; // distancia euclidiana — ajustar si hay falsos positivos
+const SUPABASE_URL      = 'https://TU-PROYECTO.supabase.co';   // ← reemplazar
+const SUPABASE_ANON_KEY = 'eyJ...TU-ANON-KEY';                // ← reemplazar
+const PIN_ADMIN         = '1234';                               // ← cambiar
+const NGROK_URL         = 'https://proofs-flashback-denture.ngrok-free.dev'; // ← URL de ngrok
 
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ══════════ ESTADO ══════════
-let _pin='', _camModo='', _stream=null, _modelsLoaded=false;
+let _pin='', _camModo='', _stream=null;
 let _usuarioActual=null, _accesoActual=null, _usuarioNuevo=null;
 let _adminAccesoId=null, _adminUsuId=null, _adminValor=0;
 
@@ -391,90 +389,27 @@ function ir(id){
   if(id==='p-admin') cargarAdmin();
 }
 
-// ══════════ FACE-API.JS — MODELOS ══════════
-async function cargarModelos(){
-  if(_modelsLoaded) return;
-  try{
-    // Esperar a que face-api.js cargue desde CDN
-    let intentos = 0;
-    while(typeof faceapi === 'undefined' && intentos < 20){
-      await new Promise(r=>setTimeout(r,500));
-      intentos++;
-    }
-    if(typeof faceapi === 'undefined') throw new Error('face-api.js no cargó');
+// ══════════ RECONOCIMIENTO FACIAL via DeepFace en PC ══════════
+async function reconocerRostro(blob){
+  // Convertir foto a base64
+  const b64 = await new Promise(r=>{
+    const reader = new FileReader();
+    reader.onloadend = ()=> r(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
 
-   const BASE = './weights';
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(BASE),
-      faceapi.nets.faceLandmark68Net.loadFromUri(BASE),
-      faceapi.nets.faceRecognitionNet.loadFromUri(BASE),
-    ]);
-    _modelsLoaded = true;
-    console.log('✅ Modelos faciales cargados');
-  } catch(e){
-    console.error('Error cargando modelos face-api:', e);
-    throw new Error('No se pudieron cargar los modelos faciales. Verifique su conexión a internet.');
-  }
-}
+  // Enviar al PC de ingreso via ngrok
+  const resp = await fetch(`${NGROK_URL}/reconocer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
+    },
+    body: JSON.stringify({ foto_base64: b64 }),
+  });
 
-// ══════════ RECONOCIMIENTO FACIAL ══════════
-async function reconocerEnVideo(){
-  const video = document.getElementById('video');
-  const det = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({inputSize:416}))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  return det;
-}
-
-async function compararConRostros(descriptor128){
-  // Descargar rostros con embedding_web de Supabase
-  const { data: rostros, error } = await db.from('rostros')
-    .select('id,id_usuario,id_vehiculo,embedding_web')
-    .eq('activo', true)
-    .not('embedding_web', 'is', null);
-
-  if(error) throw error;
-  if(!rostros?.length) return null;
-
-  // Descargar usuarios
-  const idsU = [...new Set(rostros.map(r=>r.id_usuario).filter(Boolean))];
-  const { data: usuarios } = await db.from('usuarios')
-    .select('id,nombre,apellido,cedula,tipo_usuario').in('id', idsU);
-  const mU={};
-  (usuarios||[]).forEach(u=>mU[u.id]=u);
-
-  let mejor=null, mejorDist=UMBRAL_FACIAL;
-
-  for(const r of rostros){
-    const embRaw = r.embedding_web;
-    if(!embRaw) continue;
-
-    let emb128;
-    try{
-      if(typeof embRaw==='string'){
-        const limpio = embRaw.trim().replace(/^\[/,'').replace(/\]$/,'');
-        emb128 = new Float32Array(limpio.split(',').map(Number));
-      } else if(Array.isArray(embRaw)){
-        emb128 = new Float32Array(embRaw);
-      } else { continue; }
-    } catch(e){ continue; }
-
-    // Distancia euclidiana (igual que face-api.js internamente)
-    const dist = faceapi.euclideanDistance(descriptor128, emb128);
-    const nom  = mU[r.id_usuario] ? `${mU[r.id_usuario].nombre} ${mU[r.id_usuario].apellido}` : r.id_usuario;
-    console.log(`  ${nom}: dist=${dist.toFixed(4)}`);
-
-    if(dist < mejorDist){
-      mejorDist = dist;
-      mejor = { ...r, usuarios: mU[r.id_usuario]||null };
-    }
-  }
-
-  if(mejor) console.log(`✅ Reconocido: ${mejor.usuarios?.nombre} (dist=${mejorDist.toFixed(4)})`);
-  else       console.log(`❌ No reconocido (umbral=${UMBRAL_FACIAL})`);
-
-  return mejor;
+  if(!resp.ok) throw new Error(`Error del servidor: ${resp.status}`);
+  return await resp.json();
 }
 
 // ══════════ CÁMARA ══════════
@@ -515,52 +450,49 @@ async function capturar(){
   const msg   = document.getElementById('cam-msg');
   btn.classList.add('hidden');
   loader.classList.remove('hidden');
-  document.getElementById('cam-loader-txt').textContent = 'Cargando modelos de IA...';
+  document.getElementById('cam-loader-txt').textContent = 'Tomando foto...';
   msg.textContent='⏳ Procesando...';
 
   try{
-    await cargarModelos();
-    document.getElementById('cam-loader-txt').textContent = 'Detectando rostro...';
+    // Capturar frame del video
+    const video  = document.getElementById('video');
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const blob = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.9));
 
-    const det = await reconocerEnVideo();
-    if(!det){
-      msg.textContent='❌ No se detectó rostro. Intente de nuevo.';
-      loader.classList.add('hidden');
-      btn.classList.remove('hidden');
-      return;
-    }
+    document.getElementById('cam-loader-txt').textContent = 'Reconociendo rostro...';
 
-    document.getElementById('cam-loader-txt').textContent = 'Comparando con registros...';
-    const coincidencia = await compararConRostros(det.descriptor);
+    // Enviar al PC de ingreso para reconocimiento con DeepFace
+    const resultado = await reconocerRostro(blob);
 
     detenerCamara();
     loader.classList.add('hidden');
 
-    if(!coincidencia){
-      // Verificar si hay rostros sin embedding_web (pendientes de sincronizar)
-      const { data: sinEmb } = await db.from('rostros')
-        .select('id').eq('activo',true).is('embedding_web',null).limit(1);
-
-      const errMsg = sinEmb?.length
-        ? '❌ Rostro no sincronizado aún. Ejecute el script de sincronización en el PC del parqueadero.'
-        : '❌ Rostro no reconocido. Acérquese a recepción.';
-
+    if(!resultado.encontrado){
       const errId  = {pago:'cond-error', cambio1:'cond-error', cambio2:'c1-error'};
       const destId = {pago:'p-conductor', cambio1:'p-conductor', cambio2:'p-cambio1'};
-      mostrarError(errId[_camModo]||'cond-error', errMsg);
+      mostrarError(errId[_camModo]||'cond-error', '❌ Rostro no reconocido. Acérquese a recepción.');
       ir(destId[_camModo]||'p-conductor');
       return;
     }
 
-    if(_camModo==='pago')         await procesarPagoReconocido(coincidencia);
-    else if(_camModo==='cambio1') await procesarCambio1(coincidencia);
-    else if(_camModo==='cambio2') procesarCambio2(coincidencia);
+    // Procesar según el modo
+    if(_camModo==='pago')         await procesarPagoReconocido(resultado);
+    else if(_camModo==='cambio1') await procesarCambio1(resultado);
+    else if(_camModo==='cambio2') procesarCambio2(resultado);
 
   } catch(e){
     console.error(e);
     loader.classList.add('hidden');
     btn.classList.remove('hidden');
-    msg.textContent='❌ Error: '+e.message;
+    // Si el PC no está disponible, mostrar mensaje específico
+    if(e.message.includes('fetch') || e.message.includes('network') || e.message.includes('Failed')){
+      msg.textContent = '❌ No se pudo conectar al servidor. Verifique que el kiosko esté encendido.';
+    } else {
+      msg.textContent = '❌ Error: '+e.message;
+    }
   }
 }
 
@@ -571,14 +503,18 @@ async function iniciarPago(){
 }
 
 async function procesarPagoReconocido(r){
-  const u = r.usuarios;
-  if(!u){ mostrarError('cond-error','❌ Usuario no encontrado'); ir('p-conductor'); return; }
+  const idUsuario = r.id_usuario;
+  const nombre    = r.nombre + ' ' + (r.apellido||'');
 
   const { data:acc, error } = await db.from('accesos')
     .select('id,id_usuario,id_vehiculo,fecha_entrada,estado_pago,valor_liquidado,tipo_cobro')
-    .eq('id_usuario',u.id).is('fecha_salida',null)
+    .eq('id_usuario', idUsuario).is('fecha_salida',null)
     .order('fecha_entrada',{ascending:false}).limit(1);
-  if(error||!acc?.length){ mostrarError('cond-error',`❌ ${u.nombre} no tiene acceso activo`); ir('p-conductor'); return; }
+
+  if(error||!acc?.length){
+    mostrarError('cond-error',`❌ ${nombre} no tiene acceso activo`);
+    ir('p-conductor'); return;
+  }
 
   const acceso=acc[0];
   const { data:veh }=await db.from('vehiculos').select('placa,tipo').eq('id',acceso.id_vehiculo).limit(1);
@@ -587,14 +523,14 @@ async function procesarPagoReconocido(r){
   const mins=Math.floor((Date.now()-fe)/60000);
   const tiempo=mins>=60?`${Math.floor(mins/60)}h ${mins%60}min`:`${mins} min`;
 
-  _usuarioActual={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+  _usuarioActual={id:idUsuario, nombre:nombre.trim()};
   _accesoActual=acceso;
 
-  document.getElementById('pago-nombre').textContent =`${u.nombre} ${u.apellido}`;
-  document.getElementById('pago-placa').textContent  =`🚗 ${vehiculo.placa}`;
-  document.getElementById('pago-tiempo').textContent =tiempo;
-  document.getElementById('pago-entrada').textContent=fe.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-  document.getElementById('pago-tipo').textContent   =acceso.tipo_cobro||'NORMAL';
+  document.getElementById('pago-nombre').textContent = nombre.trim();
+  document.getElementById('pago-placa').textContent  = `🚗 ${vehiculo.placa}`;
+  document.getElementById('pago-tiempo').textContent = tiempo;
+  document.getElementById('pago-entrada').textContent= fe.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('pago-tipo').textContent   = acceso.tipo_cobro||'NORMAL';
 
   const yaPages=acceso.estado_pago==='PAGADO'||acceso.estado_pago==='EXENTO';
   document.getElementById('pago-ya-pago').classList.toggle('hidden',!yaPages);
@@ -644,22 +580,27 @@ async function iniciarCambio(){
 }
 
 async function procesarCambio1(r){
-  const u=r.usuarios;
-  if(!u){ mostrarError('cond-error','❌ Usuario no encontrado'); ir('p-conductor'); return; }
+  const idUsuario=r.id_usuario;
+  const nombre=r.nombre+' '+(r.apellido||'');
+
   const { data:acc }=await db.from('accesos')
     .select('id,id_usuario,id_vehiculo,fecha_entrada,estado_pago')
-    .eq('id_usuario',u.id).is('fecha_salida',null)
+    .eq('id_usuario',idUsuario).is('fecha_salida',null)
     .order('fecha_entrada',{ascending:false}).limit(1);
-  if(!acc?.length){ mostrarError('cond-error',`❌ ${u.nombre} no tiene acceso activo`); ir('p-conductor'); return; }
+
+  if(!acc?.length){ mostrarError('cond-error',`❌ ${nombre.trim()} no tiene acceso activo`); ir('p-conductor'); return; }
+
   const acceso=acc[0];
   const { data:veh }=await db.from('vehiculos').select('placa').eq('id',acceso.id_vehiculo).limit(1);
   const placa=veh?.[0]?.placa||'--';
   const fe=new Date(acceso.fecha_entrada);
   const mins=Math.floor((Date.now()-fe)/60000);
   const tiempo=mins>=60?`${Math.floor(mins/60)}h ${mins%60}min`:`${mins} min`;
-  _usuarioActual={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+
+  _usuarioActual={id:idUsuario, nombre:nombre.trim()};
   _accesoActual=acceso;
-  document.getElementById('c1-nombre').textContent=`${u.nombre} ${u.apellido}`;
+
+  document.getElementById('c1-nombre').textContent=nombre.trim();
   document.getElementById('c1-info').textContent=`🚗 ${placa}`;
   document.getElementById('c1-placa').textContent=placa;
   document.getElementById('c1-tiempo').textContent=tiempo;
@@ -674,11 +615,10 @@ async function escanearNuevo(){
 }
 
 function procesarCambio2(r){
-  const u=r.usuarios;
-  if(!u){ mostrarError('c1-error','❌ Usuario no encontrado'); ir('p-cambio1'); return; }
-  _usuarioNuevo={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+  const nombre=(r.nombre+' '+(r.apellido||'')).trim();
+  _usuarioNuevo={id:r.id_usuario, nombre};
   document.getElementById('c2-actual').textContent=_usuarioActual?.nombre||'';
-  document.getElementById('c2-nuevo').textContent=_usuarioNuevo.nombre;
+  document.getElementById('c2-nuevo').textContent=nombre;
   document.getElementById('c2-error').classList.add('hidden');
   ir('p-cambio2');
 }
@@ -741,8 +681,7 @@ async function enriquecer(accesos){
   const mU={},mV={};
   (usu||[]).forEach(u=>mU[u.id]=u);
   (veh||[]).forEach(v=>mV[v.id]=v);
-  return accesos.map(a=>({
-    ...a,
+  return accesos.map(a=>({...a,
     usuarios: mU[a.id_usuario]||{nombre:'--',apellido:'',tipo_usuario:''},
     vehiculos:mV[a.id_vehiculo]||{placa:'--',tipo:''},
   }));
@@ -812,11 +751,9 @@ async function abrirCobrar(idA,idU,nom,pla){
     document.getElementById('mc-detalle').textContent=l?.detalle||'';
     document.getElementById('mc-loader').classList.add('hidden');
     document.getElementById('mc-info').classList.remove('hidden');
-  } catch(e){
-    mostrarError('mc-error','Error: '+e.message);
-    document.getElementById('mc-loader').classList.add('hidden');
-  }
+  } catch(e){ mostrarError('mc-error','Error: '+e.message); document.getElementById('mc-loader').classList.add('hidden'); }
 }
+
 async function confirmarCobroAdmin(){
   const metodo=document.getElementById('mc-metodo').value;
   try{
@@ -825,6 +762,7 @@ async function confirmarCobroAdmin(){
     cerrarModal('modal-cobrar'); cargarAdmin();
   } catch(e){ alert('Error: '+e.message); }
 }
+
 function abrirCortesia(idA,nom){
   _adminAccesoId=idA;
   document.getElementById('mco-nombre').textContent='👤 '+nom;
@@ -838,6 +776,7 @@ async function confirmarCortesia(){
     cerrarModal('modal-cortesia'); cargarAdmin();
   } catch(e){ alert('Error: '+e.message); }
 }
+
 async function abrirCambiar(idA,nomAct){
   _adminAccesoId=idA;
   document.getElementById('mca-actual').textContent='Actual: '+nomAct;
