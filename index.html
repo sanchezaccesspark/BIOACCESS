@@ -373,7 +373,7 @@ body{background:var(--bg);color:var(--texto);font-family:Arial,sans-serif;min-he
 const SUPABASE_URL      = 'https://kyhmhoiwraahqpibuwms.supabase.co';  // ← reemplazar
 const SUPABASE_ANON_KEY = 'sb_publishable_eY0JrrRDEJ_t0MMlJ6DNxQ_TMrb_djC';               // ← reemplazar
 const PIN_ADMIN         = '1234';                              // ← cambiar
-const UMBRAL_FACIAL     = 0.45; // distancia euclidiana — ajustar si hay falsos positivos
+const UMBRAL_FACIAL     = 0.9; // distancia euclidiana — ajustar si hay falsos positivos
 
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
