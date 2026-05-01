@@ -403,7 +403,7 @@ async function cargarModelos(){
     }
     if(typeof faceapi === 'undefined') throw new Error('face-api.js no cargó');
 
-    const BASE = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+   const BASE = './weights';
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri(BASE),
       faceapi.nets.faceLandmark68Net.loadFromUri(BASE),
