@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BioAccess</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- face-api.js para detección facial en el navegador -->
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+:root{--bg:#0A0A1A;--card:#0D0D2B;--acento:#00D4FF;--ok:#00C96B;--error:#FF3355;--texto:#FFFFFF;--sub:#AAAACC;--borde:#1A1A3A;--amber:#FFB300}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--texto);font-family:Arial,sans-serif;min-height:100vh;font-size:15px}
+.pantalla{display:none;min-height:100vh;flex-direction:column}
+.pantalla.activa{display:flex}
+.header{background:var(--card);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--borde);position:sticky;top:0;z-index:50}
+.header h1{font-size:18px;color:var(--acento)}
+.header-btn{background:transparent;border:none;color:var(--sub);font-size:22px;cursor:pointer;padding:4px 8px}
+.contenido{flex:1;padding:20px 16px;max-width:480px;margin:0 auto;width:100%}
+.card{background:var(--card);border-radius:14px;border:1px solid var(--borde);margin-bottom:12px;overflow:hidden}
+.card-body{padding:16px}
+.card-head-color{padding:14px 16px;background:rgba(0,212,255,.07);border-bottom:1px solid var(--borde)}
+.btn{width:100%;padding:14px;border-radius:12px;border:none;font-size:16px;font-weight:bold;cursor:pointer;margin-bottom:10px;transition:opacity .15s}
+.btn:active{opacity:.8}
+.btn-acento{background:var(--acento);color:#000}
+.btn-ok{background:var(--ok);color:#000}
+.btn-error{background:transparent;color:var(--error);border:1px solid var(--error)}
+.btn-amber{background:var(--amber);color:#000}
+.btn-gris{background:var(--borde);color:var(--sub)}
+.btn:disabled{background:#333;color:#666;cursor:not-allowed}
+.opcion-card{background:var(--card);border-radius:14px;padding:18px;border:1px solid;margin-bottom:14px;cursor:pointer;display:flex;align-items:center;gap:16px;transition:opacity .15s}
+.opcion-card:active{opacity:.8}
+.opcion-icon{width:56px;height:56px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px}
+.opcion-titulo{font-size:16px;font-weight:bold}
+.opcion-sub{font-size:13px;color:var(--sub);margin-top:3px}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:bold}
+.badge-pendiente{background:rgba(255,179,0,.2);color:var(--amber)}
+.badge-pagado{background:rgba(0,201,107,.2);color:var(--ok)}
+.badge-exento{background:rgba(0,212,255,.2);color:var(--acento)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:10px;padding:12px 8px;text-align:center;border:1px solid var(--borde)}
+.stat-num{font-size:22px;font-weight:bold}
+.stat-lbl{font-size:10px;color:var(--sub);margin-top:2px}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--borde);position:sticky;top:52px;z-index:40}
+.tab{flex:1;padding:12px 8px;text-align:center;font-size:13px;color:var(--sub);cursor:pointer;border-bottom:3px solid transparent}
+.tab.active{color:var(--acento);border-bottom-color:var(--acento);font-weight:bold}
+.fila-info{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--borde);font-size:14px}
+.fila-info:last-child{border:none}
+.fila-lbl{color:var(--sub)}
+.valor-grande{text-align:center;padding:20px 0}
+.valor-grande .total-lbl{font-size:13px;color:var(--sub)}
+.valor-grande .total-num{font-size:52px;font-weight:bold}
+.camara-wrap{position:relative;background:#000;border-radius:12px;overflow:hidden;margin-bottom:12px}
+.camara-wrap video{width:100%;display:block;border-radius:12px;min-height:260px}
+.oval-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.input{width:100%;padding:12px;font-size:16px;background:var(--card);border:1px solid var(--borde);border-radius:10px;color:var(--texto);margin-bottom:12px}
+.input:focus{outline:none;border-color:var(--acento)}
+.select{width:100%;padding:12px;font-size:15px;background:var(--card);border:1px solid var(--borde);border-radius:10px;color:var(--texto);margin-bottom:12px}
+.alert{padding:14px;border-radius:10px;margin-bottom:12px;font-size:14px}
+.alert-ok{background:rgba(0,201,107,.1);border:1px solid var(--ok);color:var(--ok)}
+.alert-error{background:rgba(255,51,85,.1);border:1px solid var(--error);color:var(--error)}
+.alert-info{background:rgba(0,212,255,.1);border:1px solid var(--acento);color:var(--acento)}
+.loader{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:30px}
+.spinner{width:40px;height:40px;border:3px solid var(--borde);border-top-color:var(--acento);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.exito-wrap{text-align:center;padding:40px 20px}
+.exito-icon{width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;margin:0 auto 20px;border:3px solid}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin:16px 0}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--sub);background:transparent;transition:.2s}
+.pin-dot.filled{background:var(--amber);border-color:var(--amber)}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.num-btn{padding:18px;background:var(--card);border:1px solid var(--borde);border-radius:12px;font-size:20px;cursor:pointer;color:var(--texto);text-align:center;transition:.15s}
+.num-btn:active{background:var(--borde)}
+.acceso-card{background:var(--card);border-radius:12px;border:1px solid var(--borde);margin-bottom:10px}
+.acceso-head{padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start}
+.acceso-nombre{font-size:15px;font-weight:bold}
+.acceso-placa{background:rgba(0,212,255,.15);color:var(--acento);padding:3px 10px;border-radius:6px;font-weight:bold;font-size:13px}
+.acceso-info{padding:0 14px 10px;font-size:13px;color:var(--sub)}
+.acceso-btns{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--borde);flex-wrap:wrap}
+.acceso-btn{flex:1;padding:8px 6px;border-radius:8px;border:none;font-size:12px;font-weight:bold;cursor:pointer;min-width:70px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:flex-end;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--card);border-radius:16px 16px 0 0;padding:20px;width:100%;max-width:480px;border:1px solid var(--borde);max-height:85vh;overflow-y:auto}
+.modal h3{font-size:17px;margin-bottom:14px}
+.hist-card{background:var(--card);border-radius:10px;border:1px solid var(--borde);margin-bottom:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center}
+.hist-nombre{font-size:14px;font-weight:bold}
+.hist-sub{font-size:12px;color:var(--sub);margin-top:3px}
+.hist-valor{font-size:18px;font-weight:bold;color:var(--ok)}
+.cond-box{background:var(--bg);border-radius:12px;padding:14px;border:1px solid;margin-bottom:10px;display:flex;align-items:center;gap:12px}
+.cond-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px}
+.hidden{display:none!important}
+.mt12{margin-top:12px}
+.tc{text-align:center}
+.text-sub{color:var(--sub);font-size:13px}
+.fw{font-weight:bold}
+.mb8{margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="pantalla activa" id="p-login">
+  <div class="contenido" style="display:flex;flex-direction:column;justify-content:center;min-height:100vh">
+    <div class="tc mb8">
+      <div style="font-size:64px">🅿</div>
+      <div style="font-size:28px;font-weight:bold;color:var(--acento);letter-spacing:4px">BIOACCESS</div>
+      <div class="text-sub mt12">Sistema de Parqueadero</div>
+    </div>
+    <div style="height:40px"></div>
+    <div class="opcion-card" style="border-color:rgba(0,201,107,.5)" onclick="ir('p-conductor')">
+      <div class="opcion-icon" style="background:rgba(0,201,107,.15)">🚗</div>
+      <div style="flex:1"><div class="opcion-titulo" style="color:var(--ok)">SOY CONDUCTOR</div><div class="opcion-sub">Pagar o cambiar conductor</div></div>
+      <span style="color:var(--ok)">›</span>
+    </div>
+    <div class="opcion-card" style="border-color:rgba(255,179,0,.5)" onclick="mostrarPinAdmin()">
+      <div class="opcion-icon" style="background:rgba(255,179,0,.15)">🔐</div>
+      <div style="flex:1"><div class="opcion-titulo" style="color:var(--amber)">SOY ADMINISTRADOR</div><div class="opcion-sub">Gestionar accesos y pagos</div></div>
+      <span style="color:var(--amber)">›</span>
+    </div>
+    <p class="tc text-sub mt12">BioAccess v1.0</p>
+  </div>
+</div>
+
+<!-- CONDUCTOR MENÚ -->
+<div class="pantalla" id="p-conductor">
+  <div class="header"><h1>🅿 BioAccess</h1><button class="header-btn" onclick="ir('p-login')">←</button></div>
+  <div class="contenido">
+    <div class="tc" style="padding:30px 0 24px">
+      <div style="font-size:64px">😊</div>
+      <div style="font-size:20px;font-weight:bold;margin-top:8px">¿Qué desea hacer?</div>
+      <div class="text-sub mt12">Seleccione una opción y escanee su rostro</div>
+    </div>
+    <div class="opcion-card" style="border-color:rgba(0,201,107,.5)" onclick="iniciarPago()">
+      <div class="opcion-icon" style="background:rgba(0,201,107,.15)">💰</div>
+      <div style="flex:1"><div class="opcion-titulo" style="color:var(--ok)">PAGAR EN LÍNEA</div><div class="opcion-sub">Escanee su rostro y pague su estadía</div></div>
+      <span style="color:var(--ok)">›</span>
+    </div>
+    <div class="opcion-card" style="border-color:rgba(255,179,0,.5)" onclick="iniciarCambio()">
+      <div class="opcion-icon" style="background:rgba(255,179,0,.15)">🔄</div>
+      <div style="flex:1"><div class="opcion-titulo" style="color:var(--amber)">CAMBIAR CONDUCTOR</div><div class="opcion-sub">Reemplazar el conductor asignado</div></div>
+      <span style="color:var(--amber)">›</span>
+    </div>
+    <div id="cond-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<!-- CÁMARA -->
+<div class="pantalla" id="p-camara">
+  <div class="header"><h1 id="cam-titulo">Escanear Rostro</h1><button class="header-btn" onclick="cancelarCamara()">✕</button></div>
+  <div class="contenido">
+    <div class="camara-wrap">
+      <video id="video" autoplay playsinline muted></video>
+      <svg class="oval-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs><mask id="oval-mask"><rect width="100" height="100" fill="white"/><ellipse cx="50" cy="48" rx="34" ry="40" fill="black"/></mask></defs>
+        <rect width="100" height="100" fill="rgba(0,0,0,0.4)" mask="url(#oval-mask)"/>
+        <ellipse id="oval-line" cx="50" cy="48" rx="34" ry="40" fill="none" stroke="#00D4FF" stroke-width="0.8"/>
+      </svg>
+    </div>
+    <p class="tc text-sub mb8" id="cam-inst">Centre su rostro en el óvalo y toque Capturar</p>
+    <p class="tc fw mb8" id="cam-msg" style="color:var(--texto)">Listo para capturar</p>
+    <div id="cam-loader" class="loader hidden"><div class="spinner"></div><p class="text-sub" id="cam-loader-txt">Procesando...</p></div>
+    <button class="btn btn-acento" id="btn-cap" onclick="capturar()">📸 Capturar foto</button>
+    <button class="btn btn-error" onclick="cancelarCamara()">Cancelar</button>
+  </div>
+</div>
+
+<!-- PAGO -->
+<div class="pantalla" id="p-pago">
+  <div class="header"><h1>💰 Pago</h1><button class="header-btn" onclick="ir('p-conductor')">←</button></div>
+  <div class="contenido">
+    <div class="card">
+      <div class="card-head-color">
+        <div style="font-size:16px;font-weight:bold" id="pago-nombre"></div>
+        <div style="color:var(--acento);font-size:13px;margin-top:4px" id="pago-placa"></div>
+      </div>
+      <div class="card-body">
+        <div class="fila-info"><span class="fila-lbl">⏱ Tiempo dentro</span><span id="pago-tiempo"></span></div>
+        <div class="fila-info"><span class="fila-lbl">📅 Entrada</span><span id="pago-entrada"></span></div>
+        <div class="fila-info"><span class="fila-lbl">💡 Tipo cobro</span><span id="pago-tipo"></span></div>
+      </div>
+    </div>
+    <div id="pago-ya-pago" class="alert alert-ok hidden">✅ Ya realizó su pago — puede dirigirse a la salida</div>
+    <div id="pago-cobro">
+      <div class="valor-grande">
+        <div class="total-lbl">TOTAL A PAGAR</div>
+        <div class="total-num" id="pago-valor">$0</div>
+        <div class="text-sub" id="pago-detalle"></div>
+      </div>
+      <select class="select" id="pago-metodo">
+        <option value="EFECTIVO">💵 Efectivo</option>
+        <option value="TARJETA">💳 Tarjeta</option>
+        <option value="QR">📱 QR / Transferencia</option>
+      </select>
+      <button class="btn btn-ok" id="btn-auth" onclick="confirmarPago()">✓ AUTORIZAR PAGO</button>
+      <button class="btn btn-error" onclick="ir('p-conductor')">✕ CANCELAR</button>
+    </div>
+    <div id="pago-loader" class="loader hidden"><div class="spinner"></div></div>
+    <div id="pago-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<!-- ÉXITO PAGO -->
+<div class="pantalla" id="p-exito-pago">
+  <div class="contenido" style="display:flex;flex-direction:column;justify-content:center;min-height:100vh">
+    <div class="exito-wrap">
+      <div class="exito-icon" style="color:var(--ok);border-color:var(--ok);background:rgba(0,201,107,.1)">✓</div>
+      <div style="font-size:28px;font-weight:bold;color:var(--ok);margin-bottom:8px">¡Pago Exitoso!</div>
+      <div style="font-size:44px;font-weight:bold;margin-bottom:8px" id="exito-valor"></div>
+      <div class="text-sub mb8">Su pago fue registrado.<br>Puede dirigirse a la salida.</div>
+      <button class="btn btn-ok mt12" onclick="ir('p-conductor')">Volver al inicio</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMBIO PASO 1 -->
+<div class="pantalla" id="p-cambio1">
+  <div class="header"><h1>🔄 Cambio de Conductor</h1><button class="header-btn" onclick="ir('p-conductor')">←</button></div>
+  <div class="contenido">
+    <div class="tc" style="padding:16px 0">
+      <div style="font-size:48px;color:var(--amber)">🔄</div>
+      <div style="font-size:18px;font-weight:bold;color:var(--amber);margin-top:8px">Conductor Actual</div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div style="font-size:11px;color:var(--sub);margin-bottom:8px">CONDUCTOR REGISTRADO</div>
+        <div class="cond-box" style="border-color:var(--sub)">
+          <div class="cond-avatar" style="background:rgba(170,170,204,.1)">👤</div>
+          <div><div style="font-weight:bold" id="c1-nombre"></div><div style="font-size:12px;color:var(--sub)" id="c1-info"></div></div>
+          <span style="margin-left:auto;color:var(--ok)">✓</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);margin-bottom:8px;margin-top:12px">ACCESO ACTIVO</div>
+        <div class="fila-info"><span class="fila-lbl">🚗 Placa</span><span id="c1-placa"></span></div>
+        <div class="fila-info"><span class="fila-lbl">⏱ Tiempo</span><span id="c1-tiempo"></span></div>
+        <div class="fila-info"><span class="fila-lbl">💳 Estado</span><span id="c1-estado"></span></div>
+      </div>
+    </div>
+    <div class="tc text-sub mb8">¿Quién va a retirar el vehículo?</div>
+    <button class="btn btn-amber" onclick="escanearNuevo()">😊 ESCANEAR NUEVO CONDUCTOR</button>
+    <button class="btn btn-error" onclick="ir('p-conductor')">Cancelar</button>
+    <div id="c1-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<!-- CAMBIO PASO 2 -->
+<div class="pantalla" id="p-cambio2">
+  <div class="header"><h1>✓ Confirmar Cambio</h1><button class="header-btn" onclick="ir('p-cambio1')">←</button></div>
+  <div class="contenido">
+    <div class="tc" style="padding:16px 0 24px">
+      <div style="font-size:48px">🔄</div>
+      <div style="font-size:18px;font-weight:bold;margin-top:8px">Confirmar Cambio</div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">CONDUCTOR ACTUAL</div>
+    <div class="cond-box" style="border-color:var(--sub)"><div class="cond-avatar" style="background:rgba(170,170,204,.1)">👤</div><div style="font-weight:bold" id="c2-actual"></div></div>
+    <div class="tc" style="font-size:24px;color:var(--amber);margin:8px 0">↓</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">NUEVO CONDUCTOR</div>
+    <div class="cond-box" style="border-color:var(--ok)"><div class="cond-avatar" style="background:rgba(0,201,107,.1)">👤</div><div style="font-weight:bold;color:var(--ok)" id="c2-nuevo"></div></div>
+    <div style="height:16px"></div>
+    <button class="btn btn-amber" onclick="confirmarCambio()">✓ CONFIRMAR CAMBIO</button>
+    <button class="btn btn-error" onclick="ir('p-conductor')">✕ CANCELAR</button>
+    <div id="c2-loader" class="loader hidden"><div class="spinner"></div></div>
+    <div id="c2-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<!-- ÉXITO CAMBIO -->
+<div class="pantalla" id="p-exito-cambio">
+  <div class="contenido" style="display:flex;flex-direction:column;justify-content:center;min-height:100vh">
+    <div class="exito-wrap">
+      <div class="exito-icon" style="color:var(--amber);border-color:var(--amber);background:rgba(255,179,0,.1)">🔄</div>
+      <div style="font-size:26px;font-weight:bold;color:var(--amber);margin-bottom:8px">¡Cambio Exitoso!</div>
+      <div style="font-size:18px;font-weight:bold;margin-bottom:8px" id="exito-c-nombre"></div>
+      <div class="text-sub mb8">El conductor fue actualizado en el sistema.</div>
+      <button class="btn btn-amber mt12" onclick="ir('p-conductor')">Volver al inicio</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="pantalla" id="p-admin">
+  <div class="header">
+    <h1>🅿 BioAccess Admin</h1>
+    <div><button class="header-btn" onclick="cargarAdmin()">↺</button><button class="header-btn" onclick="ir('p-login')">⏏</button></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" id="tab-activos" onclick="showTab('activos')">Dentro (<span id="cnt-a">0</span>)</div>
+    <div class="tab" id="tab-historial" onclick="showTab('historial')">Hoy (<span id="cnt-h">0</span>)</div>
+  </div>
+  <div style="padding:12px 16px">
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="s-dentro" style="color:var(--acento)">0</div><div class="stat-lbl">Dentro ahora</div></div>
+      <div class="stat"><div class="stat-num" id="s-hoy" style="color:var(--ok)">0</div><div class="stat-lbl">Salidas hoy</div></div>
+      <div class="stat"><div class="stat-num" id="s-total" style="color:var(--amber)">$0</div><div class="stat-lbl">Recaudado</div></div>
+    </div>
+  </div>
+  <div style="padding:0 16px 80px">
+    <div id="tc-activos"></div>
+    <div id="tc-historial" class="hidden"></div>
+  </div>
+  <div id="admin-loader" class="loader hidden" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="spinner"></div></div>
+  <div id="admin-error" class="alert alert-error hidden" style="margin:12px 16px"></div>
+</div>
+
+<!-- MODAL PIN -->
+<div class="modal-bg" id="modal-pin">
+  <div class="modal">
+    <h3 style="color:var(--amber)">🔐 Acceso Administrador</h3>
+    <div class="pin-dots">
+      <div class="pin-dot" id="d0"></div><div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div><div class="pin-dot" id="d3"></div>
+    </div>
+    <div id="pin-error" class="alert alert-error hidden" style="margin-bottom:10px"></div>
+    <div class="numpad">
+      <div class="num-btn" onclick="pd('1')">1</div><div class="num-btn" onclick="pd('2')">2</div><div class="num-btn" onclick="pd('3')">3</div>
+      <div class="num-btn" onclick="pd('4')">4</div><div class="num-btn" onclick="pd('5')">5</div><div class="num-btn" onclick="pd('6')">6</div>
+      <div class="num-btn" onclick="pd('7')">7</div><div class="num-btn" onclick="pd('8')">8</div><div class="num-btn" onclick="pd('9')">9</div>
+      <div class="num-btn" onclick="pb()" style="color:var(--error)">⌫</div>
+      <div class="num-btn" onclick="pd('0')">0</div>
+      <div class="num-btn" onclick="cerrarModal('modal-pin')" style="color:var(--sub)">✕</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL COBRAR -->
+<div class="modal-bg" id="modal-cobrar">
+  <div class="modal">
+    <h3 style="color:var(--ok)">💰 Registrar Cobro</h3>
+    <div id="mc-nombre" style="font-size:15px;font-weight:bold"></div>
+    <div id="mc-placa" style="font-size:13px;color:var(--acento);margin-bottom:12px"></div>
+    <div id="mc-loader" class="loader"><div class="spinner"></div><p class="text-sub">Calculando...</p></div>
+    <div id="mc-info" class="hidden">
+      <div class="valor-grande" style="padding:12px 0">
+        <div class="total-lbl">TOTAL A PAGAR</div>
+        <div class="total-num" id="mc-valor"></div>
+        <div class="text-sub" id="mc-detalle"></div>
+      </div>
+      <select class="select" id="mc-metodo">
+        <option value="EFECTIVO">💵 Efectivo</option>
+        <option value="TARJETA">💳 Tarjeta</option>
+        <option value="QR">📱 QR / Transferencia</option>
+      </select>
+      <button class="btn btn-ok" onclick="confirmarCobroAdmin()">✓ CONFIRMAR PAGO</button>
+    </div>
+    <button class="btn btn-gris" onclick="cerrarModal('modal-cobrar')">Cancelar</button>
+    <div id="mc-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<!-- MODAL CORTESÍA -->
+<div class="modal-bg" id="modal-cortesia">
+  <div class="modal">
+    <h3 style="color:var(--acento)">🎫 Autorizar Cortesía</h3>
+    <div id="mco-nombre" style="font-size:15px;margin-bottom:12px"></div>
+    <input class="input" id="mco-motivo" placeholder="Motivo (opcional)">
+    <button class="btn btn-acento" onclick="confirmarCortesia()">✓ AUTORIZAR SALIDA</button>
+    <button class="btn btn-gris" onclick="cerrarModal('modal-cortesia')">Cancelar</button>
+  </div>
+</div>
+
+<!-- MODAL CAMBIAR CONDUCTOR ADMIN -->
+<div class="modal-bg" id="modal-cambiar">
+  <div class="modal">
+    <h3 style="color:var(--amber)">👤 Cambiar Conductor</h3>
+    <div id="mca-actual" style="font-size:13px;color:var(--sub);margin-bottom:12px"></div>
+    <select class="select" id="mca-select"><option value="">-- Seleccione --</option></select>
+    <button class="btn btn-amber" onclick="confirmarCambioAdmin()">✓ CAMBIAR</button>
+    <button class="btn btn-gris" onclick="cerrarModal('modal-cambiar')">Cancelar</button>
+    <div id="mca-error" class="alert alert-error hidden"></div>
+  </div>
+</div>
+
+<script>
+// ══════════ CONFIGURACIÓN ══════════
+const SUPABASE_URL      = 'https://TU-PROYECTO.supabase.co';  // ← reemplazar
+const SUPABASE_ANON_KEY = 'eyJ...TU-ANON-KEY';               // ← reemplazar
+const PIN_ADMIN         = '1234';                              // ← cambiar
+const UMBRAL_FACIAL     = 0.45; // distancia euclidiana — ajustar si hay falsos positivos
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ══════════ ESTADO ══════════
+let _pin='', _camModo='', _stream=null, _modelsLoaded=false;
+let _usuarioActual=null, _accesoActual=null, _usuarioNuevo=null;
+let _adminAccesoId=null, _adminUsuId=null, _adminValor=0;
+
+// ══════════ NAVEGACIÓN ══════════
+function ir(id){
+  document.querySelectorAll('.pantalla').forEach(p=>p.classList.remove('activa'));
+  document.getElementById(id).classList.add('activa');
+  window.scrollTo(0,0);
+  if(id==='p-admin') cargarAdmin();
+}
+
+// ══════════ FACE-API.JS — MODELOS ══════════
+async function cargarModelos(){
+  if(_modelsLoaded) return;
+  try{
+    // Esperar a que face-api.js cargue desde CDN
+    let intentos = 0;
+    while(typeof faceapi === 'undefined' && intentos < 20){
+      await new Promise(r=>setTimeout(r,500));
+      intentos++;
+    }
+    if(typeof faceapi === 'undefined') throw new Error('face-api.js no cargó');
+
+    const BASE = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(BASE),
+      faceapi.nets.faceLandmark68Net.loadFromUri(BASE),
+      faceapi.nets.faceRecognitionNet.loadFromUri(BASE),
+    ]);
+    _modelsLoaded = true;
+    console.log('✅ Modelos faciales cargados');
+  } catch(e){
+    console.error('Error cargando modelos face-api:', e);
+    throw new Error('No se pudieron cargar los modelos faciales. Verifique su conexión a internet.');
+  }
+}
+
+// ══════════ RECONOCIMIENTO FACIAL ══════════
+async function reconocerEnVideo(){
+  const video = document.getElementById('video');
+  const det = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({inputSize:416}))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+  return det;
+}
+
+async function compararConRostros(descriptor128){
+  // Descargar rostros con embedding_web de Supabase
+  const { data: rostros, error } = await db.from('rostros')
+    .select('id,id_usuario,id_vehiculo,embedding_web')
+    .eq('activo', true)
+    .not('embedding_web', 'is', null);
+
+  if(error) throw error;
+  if(!rostros?.length) return null;
+
+  // Descargar usuarios
+  const idsU = [...new Set(rostros.map(r=>r.id_usuario).filter(Boolean))];
+  const { data: usuarios } = await db.from('usuarios')
+    .select('id,nombre,apellido,cedula,tipo_usuario').in('id', idsU);
+  const mU={};
+  (usuarios||[]).forEach(u=>mU[u.id]=u);
+
+  let mejor=null, mejorDist=UMBRAL_FACIAL;
+
+  for(const r of rostros){
+    const embRaw = r.embedding_web;
+    if(!embRaw) continue;
+
+    let emb128;
+    try{
+      if(typeof embRaw==='string'){
+        const limpio = embRaw.trim().replace(/^\[/,'').replace(/\]$/,'');
+        emb128 = new Float32Array(limpio.split(',').map(Number));
+      } else if(Array.isArray(embRaw)){
+        emb128 = new Float32Array(embRaw);
+      } else { continue; }
+    } catch(e){ continue; }
+
+    // Distancia euclidiana (igual que face-api.js internamente)
+    const dist = faceapi.euclideanDistance(descriptor128, emb128);
+    const nom  = mU[r.id_usuario] ? `${mU[r.id_usuario].nombre} ${mU[r.id_usuario].apellido}` : r.id_usuario;
+    console.log(`  ${nom}: dist=${dist.toFixed(4)}`);
+
+    if(dist < mejorDist){
+      mejorDist = dist;
+      mejor = { ...r, usuarios: mU[r.id_usuario]||null };
+    }
+  }
+
+  if(mejor) console.log(`✅ Reconocido: ${mejor.usuarios?.nombre} (dist=${mejorDist.toFixed(4)})`);
+  else       console.log(`❌ No reconocido (umbral=${UMBRAL_FACIAL})`);
+
+  return mejor;
+}
+
+// ══════════ CÁMARA ══════════
+async function abrirCamara(titulo, inst, modo){
+  document.getElementById('cam-titulo').textContent = titulo;
+  document.getElementById('cam-inst').textContent   = inst;
+  document.getElementById('cam-msg').textContent    = 'Listo para capturar';
+  document.getElementById('cam-loader').classList.add('hidden');
+  document.getElementById('btn-cap').classList.remove('hidden');
+  _camModo = modo;
+  ir('p-camara');
+
+  try{
+    _stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false
+    });
+    document.getElementById('video').srcObject = _stream;
+  } catch(e){
+    document.getElementById('cam-msg').textContent = '❌ Error de cámara: '+e.message;
+    document.getElementById('btn-cap').classList.add('hidden');
+  }
+}
+
+function detenerCamara(){
+  if(_stream){ _stream.getTracks().forEach(t=>t.stop()); _stream=null; }
+  document.getElementById('video').srcObject=null;
+}
+
+function cancelarCamara(){
+  detenerCamara();
+  const dest={pago:'p-conductor', cambio1:'p-conductor', cambio2:'p-cambio1'};
+  ir(dest[_camModo]||'p-conductor');
+}
+
+async function capturar(){
+  const btn   = document.getElementById('btn-cap');
+  const loader= document.getElementById('cam-loader');
+  const msg   = document.getElementById('cam-msg');
+  btn.classList.add('hidden');
+  loader.classList.remove('hidden');
+  document.getElementById('cam-loader-txt').textContent = 'Cargando modelos de IA...';
+  msg.textContent='⏳ Procesando...';
+
+  try{
+    await cargarModelos();
+    document.getElementById('cam-loader-txt').textContent = 'Detectando rostro...';
+
+    const det = await reconocerEnVideo();
+    if(!det){
+      msg.textContent='❌ No se detectó rostro. Intente de nuevo.';
+      loader.classList.add('hidden');
+      btn.classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('cam-loader-txt').textContent = 'Comparando con registros...';
+    const coincidencia = await compararConRostros(det.descriptor);
+
+    detenerCamara();
+    loader.classList.add('hidden');
+
+    if(!coincidencia){
+      // Verificar si hay rostros sin embedding_web (pendientes de sincronizar)
+      const { data: sinEmb } = await db.from('rostros')
+        .select('id').eq('activo',true).is('embedding_web',null).limit(1);
+
+      const errMsg = sinEmb?.length
+        ? '❌ Rostro no sincronizado aún. Ejecute el script de sincronización en el PC del parqueadero.'
+        : '❌ Rostro no reconocido. Acérquese a recepción.';
+
+      const errId  = {pago:'cond-error', cambio1:'cond-error', cambio2:'c1-error'};
+      const destId = {pago:'p-conductor', cambio1:'p-conductor', cambio2:'p-cambio1'};
+      mostrarError(errId[_camModo]||'cond-error', errMsg);
+      ir(destId[_camModo]||'p-conductor');
+      return;
+    }
+
+    if(_camModo==='pago')         await procesarPagoReconocido(coincidencia);
+    else if(_camModo==='cambio1') await procesarCambio1(coincidencia);
+    else if(_camModo==='cambio2') procesarCambio2(coincidencia);
+
+  } catch(e){
+    console.error(e);
+    loader.classList.add('hidden');
+    btn.classList.remove('hidden');
+    msg.textContent='❌ Error: '+e.message;
+  }
+}
+
+// ══════════ FLUJO PAGO ══════════
+async function iniciarPago(){
+  document.getElementById('cond-error').classList.add('hidden');
+  await abrirCamara('Escanear Rostro — Pago','Centre su rostro en el óvalo y toque Capturar','pago');
+}
+
+async function procesarPagoReconocido(r){
+  const u = r.usuarios;
+  if(!u){ mostrarError('cond-error','❌ Usuario no encontrado'); ir('p-conductor'); return; }
+
+  const { data:acc, error } = await db.from('accesos')
+    .select('id,id_usuario,id_vehiculo,fecha_entrada,estado_pago,valor_liquidado,tipo_cobro')
+    .eq('id_usuario',u.id).is('fecha_salida',null)
+    .order('fecha_entrada',{ascending:false}).limit(1);
+  if(error||!acc?.length){ mostrarError('cond-error',`❌ ${u.nombre} no tiene acceso activo`); ir('p-conductor'); return; }
+
+  const acceso=acc[0];
+  const { data:veh }=await db.from('vehiculos').select('placa,tipo').eq('id',acceso.id_vehiculo).limit(1);
+  const vehiculo=veh?.[0]||{placa:'--'};
+  const fe=new Date(acceso.fecha_entrada);
+  const mins=Math.floor((Date.now()-fe)/60000);
+  const tiempo=mins>=60?`${Math.floor(mins/60)}h ${mins%60}min`:`${mins} min`;
+
+  _usuarioActual={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+  _accesoActual=acceso;
+
+  document.getElementById('pago-nombre').textContent =`${u.nombre} ${u.apellido}`;
+  document.getElementById('pago-placa').textContent  =`🚗 ${vehiculo.placa}`;
+  document.getElementById('pago-tiempo').textContent =tiempo;
+  document.getElementById('pago-entrada').textContent=fe.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('pago-tipo').textContent   =acceso.tipo_cobro||'NORMAL';
+
+  const yaPages=acceso.estado_pago==='PAGADO'||acceso.estado_pago==='EXENTO';
+  document.getElementById('pago-ya-pago').classList.toggle('hidden',!yaPages);
+  document.getElementById('pago-cobro').classList.toggle('hidden',yaPages);
+  document.getElementById('pago-error').classList.add('hidden');
+
+  if(!yaPages){
+    const { data:liq }=await db.rpc('fn_calcular_liquidacion',{p_id_acceso:acceso.id});
+    const l=Array.isArray(liq)?liq[0]:liq;
+    _accesoActual._valor=parseFloat(l?.valor||0);
+    _accesoActual._detalle=l?.detalle||'';
+    document.getElementById('pago-valor').textContent ='$'+_accesoActual._valor.toLocaleString('es-CO',{maximumFractionDigits:0});
+    document.getElementById('pago-detalle').textContent=_accesoActual._detalle;
+  }
+  ir('p-pago');
+}
+
+async function confirmarPago(){
+  const btn=document.getElementById('btn-auth');
+  const loader=document.getElementById('pago-loader');
+  const errEl=document.getElementById('pago-error');
+  const metodo=document.getElementById('pago-metodo').value;
+  btn.disabled=true; loader.classList.remove('hidden'); errEl.classList.add('hidden');
+  try{
+    await db.from('pagos').insert({
+      id:crypto.randomUUID(), id_acceso:_accesoActual.id, id_usuario:_usuarioActual.id,
+      valor:_accesoActual._valor, metodo, estado:'APROBADO',
+      pasarela:'WEB_MOVIL', procesado_en:new Date().toISOString(),
+    });
+    await db.from('accesos').update({
+      estado_pago:'PAGADO', valor_liquidado:_accesoActual._valor,
+      metodo_pago:metodo, pagado_en:new Date().toISOString(),
+    }).eq('id',_accesoActual.id);
+    document.getElementById('exito-valor').textContent='$'+_accesoActual._valor.toLocaleString('es-CO',{maximumFractionDigits:0});
+    ir('p-exito-pago');
+  } catch(e){
+    errEl.textContent='❌ Error: '+(e.message||JSON.stringify(e));
+    errEl.classList.remove('hidden');
+    btn.disabled=false;
+  } finally{ loader.classList.add('hidden'); }
+}
+
+// ══════════ FLUJO CAMBIO CONDUCTOR ══════════
+async function iniciarCambio(){
+  document.getElementById('cond-error').classList.add('hidden');
+  await abrirCamara('Conductor Actual','Escanee el rostro del conductor registrado','cambio1');
+}
+
+async function procesarCambio1(r){
+  const u=r.usuarios;
+  if(!u){ mostrarError('cond-error','❌ Usuario no encontrado'); ir('p-conductor'); return; }
+  const { data:acc }=await db.from('accesos')
+    .select('id,id_usuario,id_vehiculo,fecha_entrada,estado_pago')
+    .eq('id_usuario',u.id).is('fecha_salida',null)
+    .order('fecha_entrada',{ascending:false}).limit(1);
+  if(!acc?.length){ mostrarError('cond-error',`❌ ${u.nombre} no tiene acceso activo`); ir('p-conductor'); return; }
+  const acceso=acc[0];
+  const { data:veh }=await db.from('vehiculos').select('placa').eq('id',acceso.id_vehiculo).limit(1);
+  const placa=veh?.[0]?.placa||'--';
+  const fe=new Date(acceso.fecha_entrada);
+  const mins=Math.floor((Date.now()-fe)/60000);
+  const tiempo=mins>=60?`${Math.floor(mins/60)}h ${mins%60}min`:`${mins} min`;
+  _usuarioActual={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+  _accesoActual=acceso;
+  document.getElementById('c1-nombre').textContent=`${u.nombre} ${u.apellido}`;
+  document.getElementById('c1-info').textContent=`🚗 ${placa}`;
+  document.getElementById('c1-placa').textContent=placa;
+  document.getElementById('c1-tiempo').textContent=tiempo;
+  document.getElementById('c1-estado').innerHTML=`<span class="badge badge-${acceso.estado_pago?.toLowerCase()}">${acceso.estado_pago}</span>`;
+  document.getElementById('c1-error').classList.add('hidden');
+  ir('p-cambio1');
+}
+
+async function escanearNuevo(){
+  document.getElementById('c1-error').classList.add('hidden');
+  await abrirCamara('Nuevo Conductor','Escanee el rostro de quien retirará el vehículo','cambio2');
+}
+
+function procesarCambio2(r){
+  const u=r.usuarios;
+  if(!u){ mostrarError('c1-error','❌ Usuario no encontrado'); ir('p-cambio1'); return; }
+  _usuarioNuevo={id:u.id, nombre:`${u.nombre} ${u.apellido}`};
+  document.getElementById('c2-actual').textContent=_usuarioActual?.nombre||'';
+  document.getElementById('c2-nuevo').textContent=_usuarioNuevo.nombre;
+  document.getElementById('c2-error').classList.add('hidden');
+  ir('p-cambio2');
+}
+
+async function confirmarCambio(){
+  const loader=document.getElementById('c2-loader');
+  const errEl=document.getElementById('c2-error');
+  loader.classList.remove('hidden'); errEl.classList.add('hidden');
+  try{
+    const { data:veh }=await db.from('vehiculos').select('id').eq('id_usuario',_usuarioNuevo.id).neq('estado','BLOQUEADO').limit(1);
+    const upd={id_usuario:_usuarioNuevo.id};
+    if(veh?.length) upd.id_vehiculo=veh[0].id;
+    await db.from('accesos').update(upd).eq('id',_accesoActual.id);
+    document.getElementById('exito-c-nombre').textContent=`Nuevo conductor: ${_usuarioNuevo.nombre}`;
+    ir('p-exito-cambio');
+  } catch(e){
+    errEl.textContent='❌ Error: '+(e.message||JSON.stringify(e));
+    errEl.classList.remove('hidden');
+  } finally{ loader.classList.add('hidden'); }
+}
+
+// ══════════ ADMIN ══════════
+async function cargarAdmin(){
+  document.getElementById('admin-loader').classList.remove('hidden');
+  document.getElementById('admin-error').classList.add('hidden');
+  try{
+    const hoy=new Date();
+    const inicio=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()).toISOString();
+    const fin=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),23,59,59).toISOString();
+    const [{ data:activos,error:e1 },{ data:historial,error:e2 }]=await Promise.all([
+      db.from('accesos').select('id,id_usuario,id_vehiculo,fecha_entrada,estado_pago,valor_liquidado,tipo_cobro').is('fecha_salida',null).order('fecha_entrada',{ascending:true}),
+      db.from('accesos').select('id,id_usuario,id_vehiculo,fecha_entrada,fecha_salida,estado_pago,valor_liquidado,metodo_pago').gte('fecha_salida',inicio).lte('fecha_salida',fin).order('fecha_salida',{ascending:false}).limit(50),
+    ]);
+    if(e1) throw e1;
+    if(e2) throw e2;
+    const activosC=await enriquecer(activos||[]);
+    const historialC=await enriquecer(historial||[]);
+    const total=historialC.reduce((s,h)=>s+parseFloat(h.valor_liquidado||0),0);
+    document.getElementById('cnt-a').textContent=activosC.length;
+    document.getElementById('cnt-h').textContent=historialC.length;
+    document.getElementById('s-dentro').textContent=activosC.length;
+    document.getElementById('s-hoy').textContent=historialC.length;
+    document.getElementById('s-total').textContent='$'+total.toLocaleString('es-CO',{maximumFractionDigits:0});
+    renderActivos(activosC);
+    renderHistorial(historialC);
+  } catch(e){
+    document.getElementById('admin-error').textContent='Error: '+(e.message||JSON.stringify(e));
+    document.getElementById('admin-error').classList.remove('hidden');
+  } finally{ document.getElementById('admin-loader').classList.add('hidden'); }
+}
+
+async function enriquecer(accesos){
+  if(!accesos.length) return [];
+  const idsU=[...new Set(accesos.map(a=>a.id_usuario).filter(Boolean))];
+  const idsV=[...new Set(accesos.map(a=>a.id_vehiculo).filter(Boolean))];
+  const [{ data:usu },{ data:veh }]=await Promise.all([
+    db.from('usuarios').select('id,nombre,apellido,cedula,tipo_usuario').in('id',idsU),
+    db.from('vehiculos').select('id,placa,tipo').in('id',idsV),
+  ]);
+  const mU={},mV={};
+  (usu||[]).forEach(u=>mU[u.id]=u);
+  (veh||[]).forEach(v=>mV[v.id]=v);
+  return accesos.map(a=>({
+    ...a,
+    usuarios: mU[a.id_usuario]||{nombre:'--',apellido:'',tipo_usuario:''},
+    vehiculos:mV[a.id_vehiculo]||{placa:'--',tipo:''},
+  }));
+}
+
+function renderActivos(acc){
+  const c=document.getElementById('tc-activos');
+  if(!acc.length){ c.innerHTML='<p class="tc text-sub" style="padding:40px">No hay vehículos dentro</p>'; return; }
+  c.innerHTML=acc.map(a=>{
+    const u=a.usuarios,v=a.vehiculos;
+    const fe=new Date(a.fecha_entrada);
+    const mins=Math.floor((Date.now()-fe)/60000);
+    const pend=a.estado_pago==='PENDIENTE';
+    const nom=`${u.nombre} ${u.apellido}`;
+    return `<div class="acceso-card">
+      <div class="acceso-head">
+        <div><div class="acceso-nombre">${nom}</div><div style="font-size:12px;color:var(--sub);margin-top:2px">${u.tipo_usuario} · ${v.tipo}</div></div>
+        <div class="acceso-placa">${v.placa}</div>
+      </div>
+      <div class="acceso-info">⏱ ${mins} min &nbsp;·&nbsp; <span class="badge badge-${a.estado_pago?.toLowerCase()}">${a.estado_pago}</span></div>
+      <div class="acceso-btns">
+        ${pend?`
+          <button class="acceso-btn" style="background:rgba(0,201,107,.15);color:var(--ok)" onclick="abrirCobrar('${a.id}','${a.id_usuario}','${nom}','${v.placa}')">💰 Cobrar</button>
+          <button class="acceso-btn" style="background:rgba(0,212,255,.15);color:var(--acento)" onclick="abrirCortesia('${a.id}','${nom}')">🎫 Cortesía</button>
+        `:`<button class="acceso-btn" style="background:rgba(0,201,107,.1);color:var(--ok)" disabled>✓ Pagado</button>`}
+        <button class="acceso-btn" style="border:1px solid var(--sub);color:var(--sub);background:transparent" onclick="abrirCambiar('${a.id}','${nom}')">👤 Cambiar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistorial(hist){
+  const c=document.getElementById('tc-historial');
+  if(!hist.length){ c.innerHTML='<p class="tc text-sub" style="padding:40px">Sin salidas hoy</p>'; return; }
+  c.innerHTML=hist.map(h=>{
+    const u=h.usuarios,v=h.vehiculos;
+    const sal=new Date(h.fecha_salida);
+    const hora=sal.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    const val=parseFloat(h.valor_liquidado||0);
+    return `<div class="hist-card">
+      <div><div class="hist-nombre">${u.nombre} ${u.apellido}</div><div class="hist-sub">${v.placa} · ${hora} · ${h.metodo_pago||'--'}</div></div>
+      <div><div class="hist-valor">$${val.toLocaleString('es-CO',{maximumFractionDigits:0})}</div><span class="badge badge-${h.estado_pago?.toLowerCase()}">${h.estado_pago}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function showTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('tc-activos').classList.toggle('hidden',t!=='activos');
+  document.getElementById('tc-historial').classList.toggle('hidden',t!=='historial');
+}
+
+async function abrirCobrar(idA,idU,nom,pla){
+  _adminAccesoId=idA; _adminUsuId=idU;
+  document.getElementById('mc-nombre').textContent=nom;
+  document.getElementById('mc-placa').textContent='🚗 '+pla;
+  document.getElementById('mc-loader').classList.remove('hidden');
+  document.getElementById('mc-info').classList.add('hidden');
+  document.getElementById('mc-error').classList.add('hidden');
+  abrirModal('modal-cobrar');
+  try{
+    const { data:liq }=await db.rpc('fn_calcular_liquidacion',{p_id_acceso:idA});
+    const l=Array.isArray(liq)?liq[0]:liq;
+    _adminValor=parseFloat(l?.valor||0);
+    document.getElementById('mc-valor').textContent='$'+_adminValor.toLocaleString('es-CO',{maximumFractionDigits:0});
+    document.getElementById('mc-detalle').textContent=l?.detalle||'';
+    document.getElementById('mc-loader').classList.add('hidden');
+    document.getElementById('mc-info').classList.remove('hidden');
+  } catch(e){
+    mostrarError('mc-error','Error: '+e.message);
+    document.getElementById('mc-loader').classList.add('hidden');
+  }
+}
+async function confirmarCobroAdmin(){
+  const metodo=document.getElementById('mc-metodo').value;
+  try{
+    await db.from('pagos').insert({id:crypto.randomUUID(),id_acceso:_adminAccesoId,id_usuario:_adminUsuId,valor:_adminValor,metodo,estado:'APROBADO',pasarela:'ADMIN_WEB',procesado_en:new Date().toISOString()});
+    await db.from('accesos').update({estado_pago:'PAGADO',valor_liquidado:_adminValor,metodo_pago:metodo,pagado_en:new Date().toISOString()}).eq('id',_adminAccesoId);
+    cerrarModal('modal-cobrar'); cargarAdmin();
+  } catch(e){ alert('Error: '+e.message); }
+}
+function abrirCortesia(idA,nom){
+  _adminAccesoId=idA;
+  document.getElementById('mco-nombre').textContent='👤 '+nom;
+  document.getElementById('mco-motivo').value='';
+  abrirModal('modal-cortesia');
+}
+async function confirmarCortesia(){
+  const mot=document.getElementById('mco-motivo').value||'Cortesía admin';
+  try{
+    await db.from('accesos').update({estado_pago:'EXENTO',valor_liquidado:0,metodo_pago:'EXENTO',notas:mot,pagado_en:new Date().toISOString()}).eq('id',_adminAccesoId);
+    cerrarModal('modal-cortesia'); cargarAdmin();
+  } catch(e){ alert('Error: '+e.message); }
+}
+async function abrirCambiar(idA,nomAct){
+  _adminAccesoId=idA;
+  document.getElementById('mca-actual').textContent='Actual: '+nomAct;
+  document.getElementById('mca-error').classList.add('hidden');
+  const sel=document.getElementById('mca-select');
+  sel.innerHTML='<option value="">Cargando...</option>';
+  abrirModal('modal-cambiar');
+  const { data:usu }=await db.from('usuarios').select('id,nombre,apellido,cedula').eq('activo',true).eq('bloqueado',false).order('nombre').limit(200);
+  sel.innerHTML='<option value="">-- Seleccione --</option>'+(usu||[]).map(u=>`<option value="${u.id}">${u.nombre} ${u.apellido} · ${u.cedula}</option>`).join('');
+}
+async function confirmarCambioAdmin(){
+  const idN=document.getElementById('mca-select').value;
+  if(!idN){ mostrarError('mca-error','Seleccione un conductor'); return; }
+  try{
+    const { data:veh }=await db.from('vehiculos').select('id').eq('id_usuario',idN).neq('estado','BLOQUEADO').limit(1);
+    const upd={id_usuario:idN};
+    if(veh?.length) upd.id_vehiculo=veh[0].id;
+    await db.from('accesos').update(upd).eq('id',_adminAccesoId);
+    cerrarModal('modal-cambiar'); cargarAdmin();
+  } catch(e){ mostrarError('mca-error','Error: '+e.message); }
+}
+
+// ══════════ PIN ADMIN ══════════
+function mostrarPinAdmin(){ _pin=''; actualizarDots(); document.getElementById('pin-error').classList.add('hidden'); abrirModal('modal-pin'); }
+function pd(d){ if(_pin.length>=4) return; _pin+=d; actualizarDots(); if(_pin.length===4){ setTimeout(()=>{ if(_pin===PIN_ADMIN){ cerrarModal('modal-pin'); ir('p-admin'); } else { document.getElementById('pin-error').textContent='PIN incorrecto'; document.getElementById('pin-error').classList.remove('hidden'); _pin=''; actualizarDots(); }},200); } }
+function pb(){ _pin=_pin.slice(0,-1); actualizarDots(); }
+function actualizarDots(){ for(let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled',i<_pin.length); }
+
+// ══════════ MODALES ══════════
+function abrirModal(id){ document.getElementById(id).classList.add('open'); }
+function cerrarModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); }));
+
+// ══════════ HELPERS ══════════
+function mostrarError(id,msg){ const el=document.getElementById(id); el.textContent=msg; el.classList.remove('hidden'); }
+</script>
+</body>
+</html>
